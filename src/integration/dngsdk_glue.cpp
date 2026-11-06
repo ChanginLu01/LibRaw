@@ -257,6 +257,7 @@ int LibRaw::try_dngsdk()
         && libraw_internal_data.unpacker_data.tiff_bps == 8
         && libraw_internal_data.unpacker_data.tiff_samples == 3
         && load_raw == &LibRaw::lossy_dng_load_raw) // JPEG DNG or JPEG DNG RAW Preview
+        || (libraw_internal_data.unpacker_data.tiff_compress == 52546) // JPEG XL compression
         || (imgdata.rawparams.options & (LIBRAW_RAWOPTIONS_DNG_STAGE2| LIBRAW_RAWOPTIONS_DNG_STAGE3))
         || ((tiff_ifd[ifdindex].dng_levels.parsedfields & (LIBRAW_DNGFM_OPCODE2| LIBRAW_DNGFM_OPCODE3))
             && (imgdata.rawparams.options & (LIBRAW_RAWOPTIONS_DNG_STAGE2_IFPRESENT | LIBRAW_RAWOPTIONS_DNG_STAGE3_IFPRESENT)))
@@ -288,6 +289,25 @@ int LibRaw::try_dngsdk()
 		  }
           stage2.Reset((dng_simple_image *)copy2.Get());
 		  copy2.Release();
+		}
+    else if (libraw_internal_data.unpacker_data.tiff_compress == 52546) // Skip Stage3 for corrected (bayer) image
+    {
+      // In JPEG XL lossy compression DNG, raw data are stored in a non-linear distribution.
+      // After Stage2, non-linear data will be linearized (via OpcodeList2 MapPolynomial)
+      // and black level subtracted, yet still mosaiced.
+      negative->ReadStage1Image(*host, stream, info);
+      negative->BuildStage2Image(*host);
+      imgdata.process_warnings |= LIBRAW_WARN_DNG_STAGE2_APPLIED;
+      stage2.Reset((dng_simple_image *)negative->Stage2Image());
+      stageBits = 1; // release Stage1 after copy
+      // reset blacklevel and whitepoint
+      imgdata.color.black = 0;
+      memset(imgdata.color.cblack, 0, sizeof(imgdata.color.cblack));
+      memset(imgdata.color.linear_max, 0, sizeof(imgdata.color.linear_max));
+      if (is_floating_point()) // Set max=1 for floating-point image
+        imgdata.color.maximum = 1.0;
+      else
+        imgdata.color.maximum = 0xffff;
 		}
 		else
 		{
@@ -337,7 +357,8 @@ int LibRaw::try_dngsdk()
     if (stage2->Bounds().W() != S.raw_width ||
         stage2->Bounds().H() != S.raw_height)
     {
-		if (imgdata.rawparams.options & LIBRAW_RAWOPTIONS_DNG_ALLOWSIZECHANGE)
+		if (imgdata.rawparams.options & LIBRAW_RAWOPTIONS_DNG_ALLOWSIZECHANGE
+			|| libraw_internal_data.unpacker_data.tiff_compress == 52546) // JXL DNG Stage 2 may have cropped margins
 		{
 			S.raw_width = S.width = stage2->Bounds().W();
 			S.left_margin = 0;

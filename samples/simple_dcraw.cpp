@@ -22,6 +22,10 @@ it under the terms of the one of two licenses as you choose:
 
 #include "libraw/libraw.h"
 
+#ifdef USE_DNGSDK
+#include "dng_host.h"
+#endif
+
 #ifndef LIBRAW_WIN32_CALLS
 #include <unistd.h>
 #include <fcntl.h>
@@ -63,6 +67,12 @@ int main(int ac, char *av[])
 
   LibRaw* RawProcessor = new LibRaw;
   RawProcessor->imgdata.rawparams.custom_camera_strings = customCameras;
+#ifdef USE_DNGSDK
+  // Set up DNG host for DNG SDK support (required for JXL DNG files)
+  dng_host *dnghost = new dng_host;
+  RawProcessor->set_dng_host(dnghost);
+#endif
+
   if (ac < 2)
   {
     printf("simple_dcraw - LibRaw %s sample. Emulates dcraw [-D] [-T] [-v] "
@@ -126,7 +136,7 @@ int main(int ac, char *av[])
     if (verbose)
       printf("Processing file %s\n", av[i]);
 
-	RawProcessor->imgdata.rawparams.options |= LIBRAW_RAWOPTIONS_ALLOW_JPEGXL_PREVIEWS;
+    RawProcessor->imgdata.rawparams.options |= LIBRAW_RAWOPTIONS_ALLOW_JPEGXL_PREVIEWS;
 
     if ((ret = RawProcessor->open_file(av[i])) != LIBRAW_SUCCESS)
     {
@@ -221,7 +231,12 @@ int main(int ac, char *av[])
 
     RawProcessor->recycle(); // just for show this call
   }
-  
+
+#ifdef USE_DNGSDK
+  if (dnghost)
+    delete dnghost;
+    dnghost = nullptr;
+#endif
   delete RawProcessor;
   return 0;
 }

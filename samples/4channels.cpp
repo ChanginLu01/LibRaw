@@ -23,6 +23,10 @@ it under the terms of the one of two licenses as you choose:
 #include <math.h>
 #include "libraw/libraw.h"
 
+#ifdef USE_DNGSDK
+#include "dng_host.h"
+#endif
+
 #ifndef LIBRAW_WIN32_CALLS
 #include <netinet/in.h>
 #else
@@ -40,6 +44,9 @@ int main(int ac, char *av[])
   char outfn[1024];
 
   LibRaw RawProcessor;
+#ifdef USE_DNGSDK
+  dng_host *dnghost = nullptr;
+#endif
   if (ac < 2)
   {
   usage:
@@ -89,6 +96,16 @@ int main(int ac, char *av[])
         goto usage;
       continue;
     }
+
+#ifdef USE_DNGSDK
+    // Set up DNG host for DNG SDK support (required for JXL DNG files)
+    if (!dnghost)
+    {
+      dnghost = new dng_host;
+      RawProcessor.set_dng_host(dnghost);
+    }
+#endif
+
     if (!use_gamma)
       OUT.gamm[0] = OUT.gamm[1] = 1;
 
